@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.env
+
+# Model artifacts & exports (large binaries)
+checkpoints/
+exports/
+preprocessor_stats.pkl
+
+# Data & logs
+mock_data/
+logs/
+*.nc
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

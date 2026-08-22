@@ -1,0 +1,86 @@
+# OceanEmbed Configuration File
+
+# Domain Configuration
+domain:
+  lat_min: 5.0
+  lat_max: 30.0
+  lon_min: 45.0
+  lon_max: 105.0
+  resolution: 0.25  # degrees
+  grid_shape: [101, 241]  # [lat_steps, lon_steps]
+
+# Input Channels (8 surface parameters)
+input_channels:
+  - SST  # Sea Surface Temperature
+  - SSS  # Sea Surface Salinity
+  - SSH  # Sea Surface Height / Sea Level Anomaly
+  - U_curr  # Surface Ocean Current U-component
+  - V_curr  # Surface Ocean Current V-component
+  - U_wind  # Surface Wind U-component (10m)
+  - V_wind  # Surface Wind V-component (10m)
+  - mask  # Land-Sea Mask / Bathymetric Depth
+
+# Target Depth Levels (meters)
+depth_levels: [0, 5, 10, 20, 30, 50, 75, 100, 125, 150, 200, 300, 500, 700, 1000]
+
+# Model Architecture
+model:
+  encoder:
+    type: "convnext"  # Options: convnext, resnet, vit
+    embed_dim: 512
+    depths: [3, 3, 9, 3]
+    dims: [96, 192, 384, 768]
+  decoder:
+    type: "unet_depth"
+    hidden_dims: [256, 128, 64]
+    use_attention: true
+
+# Loss Function
+loss:
+  mse_weight: 1.0
+  stratification_weight: 0.3
+  gradient_smoothness_weight: 0.1
+
+# Training Configuration
+training:
+  batch_size: 8
+  num_epochs: 100
+  learning_rate: 0.0001
+  weight_decay: 0.0001
+  optimizer: "AdamW"
+  scheduler: "CosineAnnealingLR"
+  early_stopping_patience: 15
+  checkpoint_dir: "checkpoints"
+  log_dir: "logs"
+
+# Data Configuration
+data:
+  train_split: 0.7
+  val_split: 0.15
+  test_split: 0.15
+  num_workers: 4
+  prefetch_factor: 2
+  
+# Normalization Statistics (will be computed from data)
+normalization:
+  method: "zscore"  # Options: zscore, minmax, robust
+
+# Validation
+validation:
+  argo_comparison: true
+  regional_metrics: true
+  regions:
+    arabian_sea: [[8, 25], [50, 78]]  # [[lat_min, lat_max], [lon_min, lon_max]]
+    bay_of_bengal: [[8, 23], [80, 100]]
+
+# API Configuration
+api:
+  host: "0.0.0.0"
+  port: 8000
+  reload: false
+
+# Dashboard Configuration
+dashboard:
+  port: 8501
+  default_depth: 100
+  colormap: "thermal"

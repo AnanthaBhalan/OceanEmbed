@@ -1,0 +1,42 @@
+# Streamlit Configuration - Tactical Dark Theme for OceanEmbed
+# Professional command center aesthetic with emerald/gold accents
+
+[theme]
+# Base theme
+primaryColor = "#00D9A3"        # Emerald green for primary actions
+backgroundColor = "#0E1117"     # Deep dark background
+secondaryBackgroundColor = "#1A1F2E"  # Slightly lighter panels
+textColor = "#FAFAFA"           # Clean white text
+font = "monospace"              # Command center monospace font
+
+[server]
+# Server configuration
+port = 8501
+headless = true
+enableCORS = false
+enableXsrfProtection = true
+
+[browser]
+# Browser settings
+gatherUsageStats = false
+serverAddress = "localhost"
+serverPort = 8501
+
+[runner]
+# Performance settings
+magicEnabled = true
+installTracer = false
+fixMatplotlib = true
+
+[client]
+# Client display settings
+showErrorDetails = true
+toolbarMode = "minimal"
+
+[logger]
+# Logging level
+level = "info"
+
+[deprecation]
+showfileUploaderEncoding = false
+showPyplotGlobalUse = false

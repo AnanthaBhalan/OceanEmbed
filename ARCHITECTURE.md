@@ -315,6 +315,10 @@ L_smooth = mean((d²T/dx²)² + (d²T/dy²)²)
 ```
 Purpose: Spatial continuity
 
+### Physics-Informed Pipeline Enhancements
+1. **BathymetryMaskedLoss:** Wraps the primary loss function (MSE + Stratification Penalty). Masking is applied via PyTorch registered buffers (`.to(device)`) ensuring zero overhead during the forward pass while explicitly zeroing gradients for landmass/seabed voxels.
+2. **INT8 Edge Deployment:** Employs `IInt8EntropyCalibrator2` on a representative 7-day sliding window dataset. A strict RMSE parity guardrail enforces that quantization degradation remains below the operational threshold prior to vessel deployment.
+
 ---
 
 ## Training Pipeline

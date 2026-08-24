@@ -18,6 +18,9 @@ Direct measurements of subsurface ocean temperatures via ARGO floats are highly 
 *   **🔍 Explainable AI (OceanGradCAM):** Eliminates the "black-box" problem. The XAI engine generates spatial saliency maps and variable attribution charts, allowing oceanographers to see exactly *which* surface anomaly (e.g., wind-driven upwelling vs. thermohaline fronts) triggered a deep-water prediction.
 *   **⚡ Edge-Sovereign Deployment:** Optimized via ONNX export with dynamic batching. Engineered for offline, low-latency inference on edge hardware (such as an NVIDIA Jetson module) aboard research vessels without requiring cloud connectivity.
 *   **📟 Tactical Command Dashboard:** A highly responsive Streamlit PoC featuring a dark command-center aesthetic, emerald telemetry, and interactive Plotly 3D thermal volumetric sections.
+⛰️ **GEBCO Bathymetry Spatial Masking:** Prevents physical impossibilities by enforcing a hard 3D spatial mask derived from the General Bathymetric Chart of the Oceans. Subterranean/rock voxels are masked to zero during training, guaranteeing zero loss accumulation and preventing gradient pollution.
+🌡️ **Thermodynamic Diagnostics (MLD):** Moves beyond raw temperature tensors by automatically extracting the Mixed Layer Depth (ΔT = 0.2°C). 
+⚡ **Edge-Sovereign TensorRT Acceleration:** Engineered for isolated research vessels. Utilizes Post-Training Quantization (PTQ) to convert the FP32 ONNX graph to an INT8 TensorRT engine, enabling high-throughput, low-latency inference on low-SWaP hardware like the NVIDIA Jetson platform.
 
 ## 🏗️ System Architecture
 *   **Input (5D Tensor):** 8 Channels (SST, SSS, SSH, U/V Currents, U/V Winds, Bathymetry) × 7 Days × 101 (Lat) × 241 (Lon). Resolution: 0.25°.

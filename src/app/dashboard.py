@@ -15,6 +15,7 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 
 import streamlit as st
 import torch
+import time
 import numpy as np
 import plotly.graph_objects as go
 from scipy import ndimage
@@ -205,6 +206,10 @@ lat = np.linspace(config['domain']['lat_min'], config['domain']['lat_max'],
 lon = np.linspace(config['domain']['lon_min'], config['domain']['lon_max'],
                   config['domain']['grid_shape'][1])
 
+# ---- Playback state (plain session key, not widget-bound) --------------- #
+if "playback_frame" not in st.session_state:
+    st.session_state.playback_frame = 6
+
 with st.sidebar:
     st.markdown(f"<h3 style='color:{GOLD}'>MISSION CONTROL</h3>", unsafe_allow_html=True)
     st.caption("Synthetic tactical feed · Arabian Sea + Bay of Bengal")
@@ -212,20 +217,26 @@ with st.sidebar:
     day_idx = st.select_slider("7-DAY TEMPORAL PLAYBACK",
                                options=list(range(7)),
                                format_func=lambda d: f"D-{6 - d:02d} ({d + 1}/7)",
-                               value=6)
-    play = st.toggle("▶ AUTO-PLAY TIMELINE")
+                               value=st.session_state.playback_frame)
+    play = st.toggle("▶ AUTO-PLAY TIMELINE", key="play")
     depth_idx = st.select_slider("TARGET DEPTH LAYER",
                                  options=list(range(len(depth_levels))),
                                  format_func=lambda i: f"{depth_levels[i]} m",
                                  value=7)
     run_xai = st.button("⚡ RUN GRAD-CAM ATTRIBUTION")
 
+# Keep manual slider drags in sync with the playback engine
+st.session_state.playback_frame = day_idx
+
+# 4. The playback engine
 if play:
-    import time
     placeholder = st.empty()
-    for d in range(7):
-        placeholder.info(f"TIMELINE PLAYBACK · DAY {d + 1}/7 · T-{6 - d}")
-        time.sleep(1.2)
+    placeholder.info(f"TIMELINE PLAYBACK · DAY {day_idx + 1}/7")
+    time.sleep(1.2)
+
+    # Advance frame and loop infinitely
+    st.session_state.playback_frame = (day_idx + 1) % 7
+
     st.rerun()
 
 st.markdown(f"""

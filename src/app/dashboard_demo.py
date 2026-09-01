@@ -218,7 +218,7 @@ def main():
         with col4:
             st.metric("Max", f"{np.max(temp_at_depth):.2f} °C")
         
-        st.success(f"✓ Model reconstructs temperature from surface to 1000m depth")
+        st.success("Model reconstructs temperature from surface to 1000m depth")
     
     with tab3:
         st.header("Vertical Temperature Profiles")

@@ -114,7 +114,7 @@ class OceanDataPreprocessor:
         self.stats['mask'] = {'mean': 0.0, 'std': 1.0, 'min': 0.0, 'max': 1.0}
         
         self.fitted = True
-        print("✓ Statistics computation complete")
+        print("Statistics computation complete")
         
         # Print summary
         print("\nNormalization Statistics:")
@@ -250,7 +250,7 @@ class OceanDataPreprocessor:
                 'depth_levels': self.depth_levels.tolist()
             }, f)
         
-        print(f"✓ Statistics saved to {filepath}")
+        print(f"Statistics saved to {filepath}")
     
     def load_statistics(self, filepath: str):
         """Load normalization statistics from file.
@@ -265,7 +265,7 @@ class OceanDataPreprocessor:
         self.normalization_method = data['normalization_method']
         self.fitted = True
         
-        print(f"✓ Statistics loaded from {filepath}")
+        print(f"Statistics loaded from {filepath}")
     
     def handle_nan_mask(self, surface: np.ndarray, target: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """Handle NaN values by filling with zeros and updating mask channel.

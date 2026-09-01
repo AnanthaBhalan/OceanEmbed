@@ -61,7 +61,17 @@ class OceanDataset(Dataset):
         if max_idx > 0:
             self.valid_indices = list(range(max_idx))
         
-        print(f"Loaded {len(self.valid_indices)} valid sequences (length={sequence_length}) for {split} split")
+        # Optional CPU-PoC subsampling (config: data.window_stride / data.grid_stride).
+        # Defaults of 1 preserve full-resolution behaviour.
+        with open('config.yaml', 'r') as f:
+            _cfg = yaml.safe_load(f)
+        self.window_stride = int(_cfg.get('data', {}).get('window_stride', 1))
+        self.grid_stride = int(_cfg.get('data', {}).get('grid_stride', 1))
+        if self.window_stride > 1:
+            self.valid_indices = self.valid_indices[::self.window_stride]
+        
+        print(f"Loaded {len(self.valid_indices)} valid sequences (length={sequence_length}, "
+              f"window_stride={self.window_stride}, grid_stride={self.grid_stride}) for {split} split")
     
     def _split_data(self):
         """Split data into train/val/test sets."""
@@ -127,6 +137,12 @@ class OceanDataset(Dataset):
             surface_sequence[t], target = self.preprocessor.handle_nan_mask(
                 surface_sequence[t], target
             )
+        
+        # Optional spatial sub-sampling (CPU PoC mode; grid_stride=1 keeps full res)
+        if self.grid_stride > 1:
+            _s = self.grid_stride
+            surface_sequence = surface_sequence[..., ::_s, ::_s].copy()
+            target = np.ascontiguousarray(target[..., ::_s, ::_s])
         
         # Apply transforms (data augmentation)
         if self.transform is not None:

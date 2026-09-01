@@ -20,7 +20,7 @@ from tqdm import tqdm
 import warnings
 warnings.filterwarnings('ignore')
 
-from src.models.ocean_embed_net import OceanEmbedNet
+from src.models.ocean_embed_net import OceanSpatiotemporalNet
 from src.data.preprocessor import OceanDataPreprocessor
 from src.data.mock_generator import MockOceanDataGenerator
 from src.evaluation.metrics import OceanMetrics
@@ -75,14 +75,14 @@ def load_model_and_data():
     
     # Load model
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = OceanEmbedNet(config_path)
+    model = OceanSpatiotemporalNet(config_path, encoder_type="lightweight")
     model.to(device)
     model.eval()
     
     # Try to load checkpoint
     checkpoint_path = Path("checkpoints/best_model.pth")
     if checkpoint_path.exists():
-        checkpoint = torch.load(checkpoint_path, map_location=device)
+        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
         model.load_state_dict(checkpoint['model_state_dict'])
         print(f"  ✓ Loaded trained model from {checkpoint_path}")
     else:
@@ -122,15 +122,19 @@ def generate_predictions(model, preprocessor, test_files, device):
             surface_tensor, target_tensor
         )
         
+        # Build a 7-day sequence by replicating this single day
+        # (spatiotemporal model expects (B, T=7, C=8, H, W))
+        surface_seq = np.repeat(surface_tensor[np.newaxis, ...], 7, axis=0)
+        
         # Predict
-        surface_torch = torch.from_numpy(surface_tensor).unsqueeze(0).float().to(device)
+        surface_torch = torch.from_numpy(surface_seq).unsqueeze(0).float().to(device)
         
         with torch.no_grad():
             # Get prediction
             pred = model(surface_torch)
             
-            # Get latent embeddings
-            embedding, _ = model.encoder(surface_torch)
+            # Get latent embeddings (spatiotemporal encoder returns 3 tensors)
+            embedding, _, _ = model.encoder(surface_torch)
             
         # Store results
         predictions.append(pred.cpu().numpy()[0])

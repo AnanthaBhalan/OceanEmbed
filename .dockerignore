@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyo
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env
+.env.*
+
+# Version control
+.git/
+.gitignore
+
+# Cache / test artifacts
+.pytest_cache/
+.coverage
+*.egg-info/
+eggs/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Development data (regenerable via mock_generator)
+mock_data/
+test_mock_data/
+test_stats.pkl
+test_checkpoint.pth
+test_argo_report.txt
+*.nc
+
+# Logs
+logs/
+
+# ONNX exports (regenerable via export_onnx; saves ~380 MB in image)
+exports/
+
+# Large sample input
+sample_input.json
+
+# Utility scripts not needed at runtime
+view_assets.bat
+
+# Only best_model.pth is needed; exclude other epoch/test checkpoints (~285 MB each)
+checkpoints/checkpoint_epoch_*.pth
+checkpoints/test_checkpoint.pth

@@ -249,7 +249,7 @@ if __name__ == "__main__":
     for key, value in loss_dict.items():
         print(f"  {key}: {value.item():.4f}")
     
-    print("\n✓ Model test complete!")
+    print("\nModel test complete!")
 
 
 
@@ -494,5 +494,5 @@ if __name__ == "__main__":
     print(f"   Output shape: {pred_light.shape}")
     
     print("\n" + "=" * 70)
-    print("✓ All spatiotemporal tests passed!")
+    print("All spatiotemporal tests passed!")
     print("=" * 70)

@@ -289,4 +289,4 @@ if __name__ == "__main__":
     print(f"\n  Final hidden: {final_h.shape}")
     print(f"  Final cell: {final_c.shape}")
     
-    print("\n✓ ConvLSTM tests passed!")
+    print("\nConvLSTM tests passed!")

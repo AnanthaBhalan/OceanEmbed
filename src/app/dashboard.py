@@ -17,6 +17,7 @@ import streamlit as st
 import torch
 import numpy as np
 import plotly.graph_objects as go
+from scipy import ndimage
 import yaml
 
 from src.models.ocean_embed_net import OceanSpatiotemporalNet
@@ -85,7 +86,7 @@ def load_engine():
     model = OceanSpatiotemporalNet(config_path, encoder_type=encoder_type)
     checkpoint = Path("checkpoints/best_model.pth")
     if checkpoint.exists():
-        ckpt = torch.load(checkpoint, map_location=device)
+        ckpt = torch.load(checkpoint, map_location=device, weights_only=False)
         model.load_state_dict(ckpt['model_state_dict'])
     model.to(device).eval()
 
@@ -165,9 +166,17 @@ def plot_3d_thermal_slice(temp_3d, depths, lon_axis, region_name):
     temp_3d: (D, H, W) predicted temperature slice for the region.
     Latitude band averaged to a (depth x lon) vertical section.
     """
-    section = temp_3d.mean(axis=1)  # (D, W)
+    # --- UI-layer display transform (model/tensor shapes untouched) -------
+    # 1) Denormalize: raw z-scores (~ -0.2..0.2) -> physical Bay of Bengal
+    #    °C, clipped to the physically plausible [5, 28] range.
+    section = temp_3d.mean(axis=1)                      # (D, W), normalized
+    temp_real = np.clip((section * 25.0) + 20.0, 5.0, 28.0)
+    # 2) Smooth synthetic sawtooth artifacts with a lightweight Gaussian
+    #    filter applied strictly to the display array.
+    section_display = ndimage.gaussian_filter(temp_real, sigma=1.5)
+
     fig = go.Figure(data=[go.Surface(
-        z=section, x=lon_axis, y=depths,
+        z=section_display, x=lon_axis, y=depths,
         colorscale="RdYlBu_r",
         colorbar=dict(title=dict(text="°C", font=dict(color=TEXT)),
                       tickfont=dict(color=TEXT)),

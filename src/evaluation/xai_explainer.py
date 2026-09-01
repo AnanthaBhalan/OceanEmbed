@@ -350,7 +350,7 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
     plt.close(fig)
 
-    print("\n✓ XAI engine tests passed!")
+    print("\nXAI engine tests passed!")
 
 
 

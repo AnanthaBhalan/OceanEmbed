@@ -225,7 +225,7 @@ class ArgoValidator:
             f.write(f"  Thermocline (100-300m) RMSE: {np.nanmean(metrics['rmse'][9:12]):.4f} °C\n")
             f.write(f"  Deep (>300m) RMSE: {np.nanmean(metrics['rmse'][12:]):.4f} °C\n")
         
-        print(f"✓ ARGO validation report saved to {output_file}")
+        print(f"ARGO validation report saved to {output_file}")
 
 
 if __name__ == "__main__":
@@ -248,4 +248,4 @@ if __name__ == "__main__":
     # Generate report
     validator.generate_validation_report(metrics, "test_argo_report.txt")
     
-    print("✓ ARGO validator test complete!")
+    print("ARGO validator test complete!")

@@ -15,10 +15,27 @@ import yaml
 import json
 from datetime import datetime
 
+
+def _json_safe(obj):
+    """Recursively convert numpy scalars/arrays to JSON-serializable natives."""
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe(v) for v in obj]
+    if isinstance(obj, (np.integer,)):
+        return int(obj)
+    if isinstance(obj, (np.floating,)):
+        return float(obj)
+    if isinstance(obj, (np.bool_,)):
+        return bool(obj)
+    if isinstance(obj, np.ndarray):
+        return _json_safe(obj.tolist())
+    return obj
+
 import sys
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from src.models.ocean_embed_net import OceanEmbedNet
+from src.models.ocean_embed_net import OceanSpatiotemporalNet
 from src.data.dataset import create_dataloaders
 from src.data.preprocessor import OceanDataPreprocessor
 from src.evaluation.metrics import compute_depth_wise_metrics
@@ -29,14 +46,14 @@ class OceanTrainer:
     
     def __init__(
         self,
-        model: OceanEmbedNet,
+        model: OceanSpatiotemporalNet,
         config_path: str = "config.yaml",
         device: str = None
     ):
         """Initialize trainer.
         
         Args:
-            model: OceanEmbedNet model
+            model: OceanSpatiotemporalNet model
             config_path: Path to configuration file
             device: Device to use for training
         """
@@ -186,7 +203,11 @@ class OceanTrainer:
                 # Collect for metrics calculation
                 all_preds.append(pred.cpu())
                 all_targets.append(target.cpu())
-                all_masks.append(surface[:, -1:, :, :].cpu())
+                # Extract mask channel from final timestep: (B, T, C, H, W) -> (B, 1, H, W)
+                if surface.dim() == 5:
+                    all_masks.append(surface[:, -1, -1:, :, :].cpu())
+                else:
+                    all_masks.append(surface[:, -1:, :, :].cpu())
         
         # Average losses
         avg_losses = {key: np.mean(values) for key, values in epoch_losses.items()}
@@ -233,7 +254,7 @@ class OceanTrainer:
         if is_best:
             best_path = self.checkpoint_dir / "best_model.pth"
             torch.save(checkpoint, best_path)
-            print(f"✓ Best model saved to {best_path}")
+            print(f"Best model saved to {best_path}")
     
     def load_checkpoint(self, filename: str):
         """Load model checkpoint.
@@ -247,7 +268,7 @@ class OceanTrainer:
             print(f"Checkpoint {filepath} not found")
             return
         
-        checkpoint = torch.load(filepath, map_location=self.device)
+        checkpoint = torch.load(filepath, map_location=self.device, weights_only=False)
         
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -257,7 +278,7 @@ class OceanTrainer:
         self.train_history = checkpoint['train_history']
         self.val_history = checkpoint['val_history']
         
-        print(f"✓ Checkpoint loaded from {filepath}")
+        print(f"Checkpoint loaded from {filepath}")
     
     def train(
         self,
@@ -317,21 +338,21 @@ class OceanTrainer:
                 self.best_val_loss = val_metrics['loss']
                 self.save_checkpoint(f"checkpoint_epoch_{epoch + 1}.pth", is_best=True)
                 self.patience_counter = 0
-                print(f"  ✓ New best model (val_loss: {self.best_val_loss:.4f})")
+                print(f"  New best model (val_loss: {self.best_val_loss:.4f})")
             else:
                 self.patience_counter += 1
             
             # Early stopping
             if self.patience_counter >= self.train_config['early_stopping_patience']:
-                print(f"\n✓ Early stopping triggered after {epoch + 1} epochs")
+                print(f"\nEarly stopping triggered after {epoch + 1} epochs")
                 break
         
-        # Save final training history
+        # Save final training history (JSON-safe: numpy -> native types)
         history_file = self.checkpoint_dir / "training_history.json"
         with open(history_file, 'w') as f:
             json.dump({
-                'train': self.train_history,
-                'val': self.val_history
+                'train': _json_safe(self.train_history),
+                'val': _json_safe(self.val_history)
             }, f, indent=2)
         
         self.writer.close()
@@ -386,9 +407,18 @@ def train_model(
     print(f"  Val batches: {len(val_loader)}")
     print(f"  Test batches: {len(test_loader)}")
     
-    # Initialize model
+    # Initialize spatiotemporal model (matches 7-day sequence Dataset output)
     print("\n2. Initializing model...")
-    model = OceanEmbedNet(config_path)
+    model = OceanSpatiotemporalNet(config_path, encoder_type="lightweight")
+    
+    # Match decoder output grid to the (optionally strided) dataset grid
+    grid_stride = int(config.get('data', {}).get('grid_stride', 1))
+    if grid_stride > 1:
+        strided_shape = tuple(
+            int(np.ceil(g / grid_stride)) for g in config['domain']['grid_shape']
+        )
+        model.decoder.target_shape = strided_shape
+        print(f"  CPU-PoC grid_stride={grid_stride}: decoder target shape -> {strided_shape}")
     
     params = model.count_parameters()
     print(f"  Total parameters: {params['total']:,}")
@@ -414,7 +444,7 @@ def train_model(
     print(f"  Test RMSE: {test_metrics['avg_rmse']:.4f}")
     print(f"  Test Correlation: {test_metrics['avg_correlation']:.4f}")
     
-    print("\n✓ Training pipeline complete!")
+    print("\nTraining pipeline complete!")
     
     return model, trainer
 

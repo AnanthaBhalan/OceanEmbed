@@ -74,15 +74,15 @@ async def load_model():
 
     checkpoint_path = Path("checkpoints/best_model.pth")
     if checkpoint_path.exists():
-        checkpoint = torch.load(checkpoint_path, map_location=device)
+        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
         model.load_state_dict(checkpoint['model_state_dict'])
-        print(f"✓ Model loaded from {checkpoint_path}")
+        print(f"Model loaded from {checkpoint_path}")
     else:
         print("Warning: No checkpoint found. Using untrained model.")
 
     # XAI engine targeting the last decoder convolution
     explainer = OceanGradCAM(model)
-    print(f"✓ XAI engine ready (target: {type(explainer.target_layer).__name__})")
+    print(f"XAI engine ready (target: {type(explainer.target_layer).__name__})")
 
 
 def _stack_surface_tensor(data: Dict[str, List]) -> torch.Tensor:
@@ -238,9 +238,11 @@ async def run_benchmark(num_iters: int = 5, height: int = 64, width: int = 96):
     try:
         sample = torch.randn(1, 7, 8, height, width, device=device)
 
-        onnx_path = Path("exports/ocean_embed_st.onnx")
-        if not onnx_path.exists():
-            onnx_path = export_onnx(model, sample.cpu(), str(onnx_path))
+        # Always export a fresh ONNX artifact from the *currently loaded*
+        # weights so PyTorch-vs-ONNX parity reflects the live model (a stale
+        # file could have been built from older/untrained weights).
+        onnx_path = Path("exports/ocean_embed_st_live.onnx")
+        onnx_path = export_onnx(model, sample.cpu(), str(onnx_path))
 
         parity = verify_onnx_export(model, sample.cpu(), str(onnx_path), atol=1e-3)
 

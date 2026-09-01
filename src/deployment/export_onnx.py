@@ -94,7 +94,7 @@ def export_onnx(
         model.train()
 
     size_mb = Path(onnx_path).stat().st_size / (1024 * 1024)
-    print(f"  ✓ ONNX exported: {onnx_path} ({size_mb:.2f} MB)")
+    print(f"  ONNX exported: {onnx_path} ({size_mb:.2f} MB)")
     return onnx_path
 
 
@@ -145,8 +145,8 @@ def verify_onnx_export(
         "onnx_shape": list(ort_out.shape),
     }
 
-    status = "✓ PARITY OK" if ok else "✗ PARITY FAILED"
-    print(f"  {status} | max|Δ|={max_diff:.2e} mean|Δ|={mean_diff:.2e} (atol={atol})")
+    status = "PARITY OK" if ok else "PARITY FAILED"
+    print(f"  {status} | max|delta|={max_diff:.2e} mean|delta|={mean_diff:.2e} (atol={atol})")
     return result
 
 
@@ -294,6 +294,6 @@ if __name__ == "__main__":
 
     report = full_deployment_report(model, x, num_iters=5)
     assert report["parity"]["allclose"], "ONNX parity check failed!"
-    print("\n✓ Deployment engine tests passed!")
+    print("\nDeployment engine tests passed!")
 
 

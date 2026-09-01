@@ -15,10 +15,27 @@ import yaml
 from src.data.mock_generator import MockOceanDataGenerator
 from src.data.preprocessor import OceanDataPreprocessor
 from src.data.dataset import OceanDataset, create_dataloaders
-from src.models.ocean_embed_net import OceanEmbedNet
+from src.data.mock_generator import MockOceanDataGenerator
+from src.data.preprocessor import OceanDataPreprocessor
+from src.data.dataset import OceanDataset, create_dataloaders
+from src.models.ocean_embed_net import OceanSpatiotemporalNet
 from src.training.train import OceanTrainer
 from src.evaluation.metrics import OceanMetrics, compute_depth_wise_metrics
 from src.evaluation.argo_validator import ArgoValidator
+
+
+def _grid_shape():
+    """Return (H, W) after applying the optional CPU-PoC grid_stride in config."""
+    with open("config.yaml", "r") as f:
+        cfg = yaml.safe_load(f)
+    gh, gw = cfg["domain"]["grid_shape"]
+    s = int(cfg.get("data", {}).get("grid_stride", 1))
+    return (int(np.ceil(gh / s)), int(np.ceil(gw / s)))
+
+
+def _match_model_grid(model):
+    h, w = _grid_shape()
+    model.decoder.target_shape = (h, w)
 
 
 def test_data_generation():
@@ -41,9 +58,9 @@ def test_data_generation():
     assert 'SSS' in surface_ds, "Missing SSS"
     assert 'SSH' in surface_ds, "Missing SSH"
     
-    # Generate dataset
+    # Generate dataset (enough days for 7-day sequences in train/val/test splits)
     test_data_dir = "test_mock_data"
-    generator.generate_dataset(num_samples=10, output_dir=test_data_dir)
+    generator.generate_dataset(num_samples=60, output_dir=test_data_dir)
     
     print("✓ Data generation test passed")
     return test_data_dir
@@ -96,9 +113,10 @@ def test_dataset(data_dir, preprocessor):
     # Get sample
     surface, target, metadata = dataset[0]
     
-    # Check shapes
-    assert surface.shape == (8, 101, 241), f"Surface shape mismatch: {surface.shape}"
-    assert target.shape == (15, 101, 241), f"Target shape mismatch: {target.shape}"
+    # Check shapes (7-day sequence dataset, grid_stride-aware)
+    _H, _W = _grid_shape()
+    assert surface.shape == (7, 8, _H, _W), f"Surface shape mismatch: {surface.shape}"
+    assert target.shape == (15, _H, _W), f"Target shape mismatch: {target.shape}"
     
     # Check types
     assert isinstance(surface, torch.Tensor), "Surface not a tensor"
@@ -116,8 +134,8 @@ def test_dataset(data_dir, preprocessor):
     batch = next(iter(train_loader))
     batch_surface, batch_target, batch_metadata = batch
     
-    assert batch_surface.shape == (2, 8, 101, 241), "Batch surface shape mismatch"
-    assert batch_target.shape == (2, 15, 101, 241), "Batch target shape mismatch"
+    assert batch_surface.shape == (2, 7, 8, _H, _W), "Batch surface shape mismatch"
+    assert batch_target.shape == (2, 15, _H, _W), "Batch target shape mismatch"
     
     print("✓ Dataset test passed")
     return train_loader, val_loader
@@ -129,29 +147,33 @@ def test_model():
     print("TEST 4: Model Architecture")
     print("="*70)
     
-    model = OceanEmbedNet("config.yaml")
+    model = OceanSpatiotemporalNet("config.yaml", encoder_type="lightweight")
     
     # Print parameters
     params = model.count_parameters()
     print(f"  Total parameters: {params['total']:,}")
     print(f"  Trainable parameters: {params['trainable']:,}")
     
-    # Test forward pass
+    # Test forward pass (5D spatiotemporal input)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.to(device)
     
-    dummy_input = torch.randn(2, 8, 101, 241).to(device)
+    dummy_input = torch.randn(1, 7, 8, 101, 241).to(device)
     output = model(dummy_input)
     
-    assert output.shape == (2, 15, 101, 241), f"Output shape mismatch: {output.shape}"
+    assert output.shape == (1, 15, 101, 241), f"Output shape mismatch: {output.shape}"
     
     # Test loss computation
-    dummy_target = torch.randn(2, 15, 101, 241).to(device)
+    dummy_target = torch.randn(1, 15, 101, 241).to(device)
     loss_dict = model.compute_loss(output, dummy_target, dummy_input)
     
     assert 'loss' in loss_dict, "Missing loss"
     assert 'mse_loss' in loss_dict, "Missing MSE loss"
     assert 'stratification_loss' in loss_dict, "Missing stratification loss"
+    
+    # Match decoder grid to the (optionally strided) dataset so downstream
+    # training / inference produce grids consistent with the targets.
+    _match_model_grid(model)
     
     print("✓ Model test passed")
     return model
@@ -181,7 +203,7 @@ def test_training(model, train_loader, val_loader):
     trainer.save_checkpoint("test_checkpoint.pth")
     
     # Load checkpoint
-    trainer2 = OceanTrainer(OceanEmbedNet("config.yaml"), "config.yaml")
+    trainer2 = OceanTrainer(OceanSpatiotemporalNet("config.yaml", encoder_type="lightweight"), "config.yaml")
     trainer2.load_checkpoint("test_checkpoint.pth")
     
     print("✓ Training test passed")
@@ -201,24 +223,30 @@ def test_inference(model, data_dir, preprocessor):
     surface_files = sorted(Path(data_dir).glob("surface/*.nc"))
     surface_ds = xr.open_dataset(surface_files[0])
     
-    # Preprocess
+    # Preprocess and build a 7-day sequence by replicating this single day
     surface_tensor = preprocessor.preprocess_surface(surface_ds)
     surface_tensor, _ = preprocessor.handle_nan_mask(
         surface_tensor,
-        np.zeros((15, 101, 241))
+        np.zeros((15, *_grid_shape()))
     )
+    # Apply the same optional grid_stride used by the dataset / model
+    _H, _W = _grid_shape()
+    if (_H, _W) != surface_tensor.shape[1:]:
+        _s = int(np.ceil(surface_tensor.shape[1] / _H))
+        surface_tensor = surface_tensor[..., ::_s, ::_s]
+    surface_seq = np.repeat(surface_tensor[np.newaxis, ...], 7, axis=0)  # (7, 8, H, W)
     
     # Predict
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.to(device)
     model.eval()
     
-    surface_torch = torch.from_numpy(surface_tensor).unsqueeze(0).float().to(device)
+    surface_torch = torch.from_numpy(surface_seq).unsqueeze(0).float().to(device)
     
     with torch.no_grad():
         pred = model(surface_torch)
     
-    assert pred.shape == (1, 15, 101, 241), f"Prediction shape mismatch: {pred.shape}"
+    assert pred.shape == (1, 15, _H, _W), f"Prediction shape mismatch: {pred.shape}"
     
     # Denormalize
     pred_np = pred.cpu().numpy()[0]
@@ -247,7 +275,7 @@ def test_evaluation(pred, target):
     # Create tensors
     pred_tensor = torch.from_numpy(pred).unsqueeze(0)
     target_tensor = torch.from_numpy(target).unsqueeze(0)
-    mask_tensor = torch.ones(1, 1, 101, 241)
+    mask_tensor = torch.ones(1, 1, *_grid_shape())
     
     # Compute metrics
     with open("config.yaml", 'r') as f:
@@ -345,11 +373,15 @@ def run_all_tests():
         pred = test_inference(model, data_dir, preprocessor)
         
         # Test 7: Evaluation
-        # Load ground truth for comparison
+        # Load ground truth and match it to the strided prediction grid
         import xarray as xr
         subsurface_files = sorted(Path(data_dir).glob("subsurface/*.nc"))
         subsrf_ds = xr.open_dataset(subsurface_files[0])
         target = preprocessor.preprocess_subsurface(subsrf_ds)
+        _H, _W = _grid_shape()
+        if (_H, _W) != target.shape[1:]:
+            _s = int(np.ceil(target.shape[1] / _H))
+            target = target[..., ::_s, ::_s]
         target_denorm = np.zeros_like(target)
         for d in range(target.shape[0]):
             target_denorm[d] = preprocessor.denormalize(target[d], 'temperature')

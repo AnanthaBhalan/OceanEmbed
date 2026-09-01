@@ -158,8 +158,8 @@ class MockOceanDataGenerator:
         g = 9.81  # gravity
         
         # Compute gradients (finite differences)
-        dy = np.gradient(self.lat)[1] * 111000  # meters
-        dx = np.gradient(self.lon)[1] * 111000 * np.cos(np.deg2rad(self.lat_grid))
+        dy = np.gradient(self.lat)[1] * 111000  # meters (scalar, uniform lat spacing)
+        dx = np.gradient(self.lon)[1] * 111000 * np.cos(np.deg2rad(self.lat))  # (lat,) meters
         
         dssh_dy, dssh_dx = np.gradient(ssh)
         dssh_dy /= dy
@@ -364,7 +364,7 @@ class MockOceanDataGenerator:
             if (i + 1) % 10 == 0:
                 print(f"  Generated {i + 1}/{num_samples} samples")
         
-        print(f"✓ Dataset generation complete! Files saved to {output_path}")
+        print(f"Dataset generation complete. Files saved to {output_path}")
         
         # Create a summary file
         summary = {

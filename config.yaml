@@ -43,8 +43,8 @@ loss:
 
 # Training Configuration
 training:
-  batch_size: 8
-  num_epochs: 100
+  batch_size: 2
+  num_epochs: 3
   learning_rate: 0.0001
   weight_decay: 0.0001
   optimizer: "AdamW"
@@ -58,8 +58,11 @@ data:
   train_split: 0.7
   val_split: 0.15
   test_split: 0.15
-  num_workers: 4
+  num_workers: 0
   prefetch_factor: 2
+  # CPU PoC subsampling (set both to 1 for full-resolution production training)
+  grid_stride: 2      # spatial sub-sampling factor (2 -> 51x121 grid, ~4x faster)
+  window_stride: 2    # sliding-window sub-sampling factor (2 -> half the sequences)
   
 # Normalization Statistics (will be computed from data)
 normalization:

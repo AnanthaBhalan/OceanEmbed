@@ -38,6 +38,7 @@ class OceanMetrics:
             RMSE value
         """
         if mask is not None:
+            mask = np.asarray(mask).astype(bool)
             pred = pred[mask]
             target = target[mask]
         
@@ -63,6 +64,7 @@ class OceanMetrics:
             MAE value
         """
         if mask is not None:
+            mask = np.asarray(mask).astype(bool)
             pred = pred[mask]
             target = target[mask]
         
@@ -88,6 +90,7 @@ class OceanMetrics:
             Bias value
         """
         if mask is not None:
+            mask = np.asarray(mask).astype(bool)
             pred = pred[mask]
             target = target[mask]
         
@@ -113,6 +116,7 @@ class OceanMetrics:
             Correlation coefficient
         """
         if mask is not None:
+            mask = np.asarray(mask).astype(bool)
             pred = pred[mask]
             target = target[mask]
         
@@ -175,7 +179,12 @@ class OceanMetrics:
             target_d = target[:, d, :, :].flatten()
             
             if mask is not None:
-                mask_d = np.tile(mask, (B, 1, 1)).flatten()
+                # mask is (1, H, W) [single shared mask -> broadcast to batch]
+                # or (B, H, W) [already per-batch]. Tile only in the shared case.
+                if mask.shape[0] == 1:
+                    mask_d = np.tile(mask, (B, 1, 1)).flatten()
+                else:
+                    mask_d = mask.flatten()
             else:
                 mask_d = None
             
@@ -325,4 +334,4 @@ if __name__ == "__main__":
     # Print summary
     metrics_calc.print_metrics_summary(metrics, "Test Metrics")
     
-    print("✓ Metrics test complete!")
+    print("Metrics test complete!")

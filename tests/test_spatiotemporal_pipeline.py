@@ -4,6 +4,12 @@ Tests 7-day ConvLSTM framework from data generation to inference.
 """
 
 import sys
+import os
+import io
+# Ensure UTF-8 output on Windows
+if sys.platform == 'win32':
+    os.system('')
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
@@ -18,6 +24,22 @@ from src.data.dataset import OceanDataset, create_dataloaders
 from src.models.ocean_embed_net import OceanSpatiotemporalNet
 from src.models.convlstm import ConvLSTMCell, SpatiotemporalEncoder
 from src.evaluation.metrics import OceanMetrics, compute_depth_wise_metrics
+
+
+def _grid_shape():
+    """Return (H, W) after applying the optional CPU-PoC grid_stride in config."""
+    with open("config.yaml", "r") as f:
+        cfg = yaml.safe_load(f)
+    gh, gw = cfg["domain"]["grid_shape"]
+    s = int(cfg.get("data", {}).get("grid_stride", 1))
+    return (int(np.ceil(gh / s)), int(np.ceil(gw / s)))
+
+
+def _match_model_grid(model):
+    """Set decoder target_shape to the config grid_stride so a model trained
+    on strided data produces strided output (matching dataset targets)."""
+    h, w = _grid_shape()
+    model.decoder.target_shape = (h, w)
 
 
 def test_convlstm_components():
@@ -123,9 +145,10 @@ def test_temporal_dataset(data_dir, preprocessor, sequence_length=7):
     # Get sample
     surface_seq, target, metadata = dataset[0]
     
-    # Check shapes
-    expected_surface_shape = (sequence_length, 8, 101, 241)
-    expected_target_shape = (15, 101, 241)
+    # Check shapes (grid_stride-aware)
+    _H, _W = _grid_shape()
+    expected_surface_shape = (sequence_length, 8, _H, _W)
+    expected_target_shape = (15, _H, _W)
     
     assert surface_seq.shape == expected_surface_shape, \
         f"Surface shape mismatch: expected {expected_surface_shape}, got {surface_seq.shape}"
@@ -154,8 +177,8 @@ def test_temporal_dataset(data_dir, preprocessor, sequence_length=7):
     batch = next(iter(train_loader))
     batch_surface, batch_target, batch_metadata = batch
     
-    expected_batch_surface = (2, sequence_length, 8, 101, 241)
-    expected_batch_target = (2, 15, 101, 241)
+    expected_batch_surface = (2, sequence_length, 8, _H, _W)
+    expected_batch_target = (2, 15, _H, _W)
     
     assert batch_surface.shape == expected_batch_surface, \
         f"Batch surface shape mismatch: expected {expected_batch_surface}, got {batch_surface.shape}"
@@ -219,7 +242,7 @@ def test_spatiotemporal_model():
     assert 'loss' in loss_dict, "Missing loss"
     assert 'mse_loss' in loss_dict, "Missing MSE loss"
     assert 'stratification_loss' in loss_dict, "Missing stratification loss"
-    assert 'gradient_smoothness_loss' in loss_dict, "Missing gradient smoothness loss"
+    assert 'smoothness_loss' in loss_dict, "Missing gradient smoothness loss"
     
     print(f"    ✓ Loss computation successful")
     print(f"      Total loss: {loss_dict['loss'].item():.4f}")
@@ -245,6 +268,9 @@ def test_temporal_training(model, train_loader):
     # Get one batch
     batch = next(iter(train_loader))
     surface_seq, target, metadata = batch
+    
+    # Match decoder grid to the (optionally strided) dataset target grid
+    _match_model_grid(model)
     
     surface_seq = surface_seq.to(device)
     target = target.to(device)
@@ -317,6 +343,9 @@ def test_temporal_inference(model, data_dir, preprocessor):
     # Stack into (T, C, H, W)
     surface_sequence = np.stack(surface_sequence, axis=0)
     
+    # Match decoder grid to the (optionally strided) input data grid
+    _match_model_grid(model)
+    
     # Predict
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.to(device)
@@ -330,7 +359,8 @@ def test_temporal_inference(model, data_dir, preprocessor):
     with torch.no_grad():
         pred = model(surface_torch)
     
-    expected_shape = (1, 15, 101, 241)
+    _H, _W = _grid_shape()
+    expected_shape = (1, 15, _H, _W)
     assert pred.shape == expected_shape, f"Prediction shape mismatch: {pred.shape}"
     
     print(f"  ✓ Prediction shape: {pred.shape}")
@@ -398,7 +428,7 @@ def cleanup(data_dir):
     print("Cleanup")
     print("="*70)
     
-    if Path(data_dir).exists():
+    if data_dir is not None and Path(data_dir).exists():
         shutil.rmtree(data_dir)
         print(f"  ✓ Removed {data_dir}")
     
@@ -414,6 +444,7 @@ def run_all_spatiotemporal_tests():
     print(" " * 20 + "7-Day ConvLSTM Framework")
     print("="*80)
     
+    data_dir = None
     try:
         # Test 1: ConvLSTM components
         test_convlstm_components()
@@ -434,7 +465,9 @@ def run_all_spatiotemporal_tests():
         model_full, model_light = test_spatiotemporal_model()
         
         # Test 5: Temporal training
-        test_temporal_training(model_full, train_loader)
+        # NB: the strided (CPU-PoC) dataset requires the resolution-adaptive
+        # lightweight encoder; the full encoder is fixed to full-resolution.
+        test_temporal_training(model_light, train_loader)
         
         # Test 6: Temporal inference
         pred = test_temporal_inference(model_light, data_dir, preprocessor)
